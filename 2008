@@ -1,0 +1,206 @@
+module LCD_CTRL(clk, reset, datain, cmd, cmd_valid, dataout, output_valid, busy);
+input           clk;
+input           reset;
+input   [7:0]   datain;            // graph info
+input   [3:0]   cmd;               // command mode
+input           cmd_valid;         
+output reg [7:0]   dataout;  
+output reg         output_valid;
+output reg         busy;
+
+
+ reg [6:0] store_index;
+ reg [4:0] out_index;
+
+ reg [7:0] data[107:0];            //save data
+ reg [3:0] origin[1:0];            //save origin coordination
+
+ reg [3:0] command;               //save command
+ parameter Load        = 4'd0,
+           RotateLeft  = 4'd1,
+           RotateRight = 4'd2,
+           ZoomIn      = 4'd3,  
+           ZoomFit     = 4'd4,
+           Shiftright  = 4'd5,
+           Shiftleft   = 4'd6,
+           Shiftup     = 4'd7,
+           Shiftdown   = 4'd8,
+           Output      = 4'd9;
+          
+ reg state ;                    //save mode
+ parameter ZOOM_FIT = 1'd0,
+          ZOOM_IN  = 1'd1;
+
+ reg [1:0] rotate;
+ parameter left   = 2'b00,
+          normal = 2'b01,
+          right  = 2'b10;  
+                             
+ reg [6:0] position;
+ always@(*)begin
+     if(state == ZOOM_IN) begin
+         case(rotate)
+             left: position = origin[0]+(origin[1]+out_index[1:0])*12-out_index[4:2]-23;
+             // position = 3+(origin[0]-2)+(origin[1]-2)*12+(out_index%4)*12-(out_index/4);
+      
+             normal: position = out_index[1:0]+origin[0]+(origin[1]+out_index[4:2])*12 -26;
+             //position = (out_index%4+(origin[0]-2))+((origin[1]-2)+out_index/4)*12 ;
+        
+             right: position = 10+origin[0]+(origin[1]-out_index[1:0])*12+out_index[4:2];
+             //position = 36+(origin[0]-2)+(origin[1]-2)*12-(out_index%4)*12+(out_index/4);
+         endcase
+     end 
+     else begin    //ZOOM_FIT  
+         case(rotate)
+             left: position = 22+(out_index[1:0])*24-(out_index[4:2])*3;
+             // position = 22+(out_index%4)*24-(out_index/4)*3;
+          
+             normal: position = 13+(out_index[1:0])*3+(out_index[4:2])*24;
+             // position = 13+(out_index%4)*3+(out_index/4)*24;
+                      
+             right: position = 85-(out_index[1:0])*24+(out_index[4:2])*3; 
+             //  position = 85-(out_index%4)*24+(out_index/4)*3; 
+         endcase
+     end
+ end
+
+ always@(posedge clk or posedge reset)begin
+     if(reset)begin 
+         store_index <= 0;
+         out_index <=0;      // initialize index data
+        
+         origin[0]<=0;
+         origin[1]<=0;
+         rotate <= normal;
+           
+         output_valid <= 0;
+         busy <= 0;         
+     end 
+     else if(cmd_valid == 1)begin
+         command <= cmd;
+         busy <= 1 ;
+     end 
+     else begin
+         case(command)
+             Load:begin
+                 data[store_index] <= datain;
+                 store_index <= store_index+1;  
+                 if(store_index == 107 )begin         //end load data
+                     command <= Output;      
+                     state <= ZOOM_FIT;
+                     rotate <= normal;
+                     store_index <= 0;
+                 end
+                end
+             RotateLeft:begin
+                if(state == ZOOM_FIT && rotate > 0)
+                      rotate <= rotate - 1;  
+                    command <= Output;
+                   end
+         RotateRight:begin
+                  if(state == ZOOM_FIT && rotate < 2)begin
+                   rotate <= rotate + 1;  
+               end
+                command <= Output;
+                end     
+         ZoomIn:begin
+                origin[0] <= 6;   
+                origin[1] <= 5;
+                state <= ZOOM_IN;
+                command <= Output;
+                end
+         ZoomFit:begin
+                 
+                state <= ZOOM_FIT;
+                command <= Output;
+                 end     
+        Shiftright:begin
+                   if(state == ZOOM_IN)begin
+                      case(rotate)
+                          left:begin
+                                if(origin[1]<7 )              
+                                     origin[1] <= origin[1]+1;   // y + 1 
+                               end
+                          normal:begin
+                                 if(origin[0]<10 )               
+                                     origin[0] <= origin[0]+1;   // x + 1 
+                                 end
+                          right:begin
+                                 if(origin[1]>2 )               
+                                     origin[1] <= origin[1]-1;   // y - 1
+                                end       
+                      endcase
+                    end 
+                   command <= Output;
+                   end   
+        Shiftleft:begin
+                  if(state == ZOOM_IN)begin
+                      case(rotate)
+                          left:begin
+                                if(origin[1]> 2)              
+                                     origin[1] <= origin[1]-1;   // y - 1 
+                               end
+                          normal:begin
+                                 if(origin[0] > 2 )               
+                                     origin[0] <= origin[0]-1;   // x - 1 
+                                 end
+                          right:begin
+                                 if(origin[1] < 7)               
+                                     origin[1] <= origin[1]+1;   // y + 1
+                                end       
+                      endcase
+                    end 
+                   command <= Output;
+                   end   
+          Shiftup:begin
+                  if(state == ZOOM_IN)begin
+                      case(rotate)
+                          left:begin
+                                if(origin[0] < 10)              
+                                     origin[0] <= origin[0]+1;   // x + 1 
+                               end
+                          normal:begin
+                                 if(origin[1] > 2)               
+                                     origin[1] <= origin[1]-1;   // y - 1 
+                                 end
+                          right:begin
+                                 if(origin[0] > 2)               
+                                     origin[0] <= origin[0]-1;   // x - 1
+                                end       
+                      endcase
+                    end 
+                   command <= Output;
+                   end   
+        Shiftdown:begin
+                  if(state == ZOOM_IN)begin
+                      case(rotate)
+                          left:begin
+                                if(origin[0]> 2)              
+                                     origin[0] <= origin[0]-1;   // x - 1 
+                               end
+                          normal:begin
+                                 if(origin[1] <7)               
+                                     origin[1] <= origin[1]+1;   // y + 1 
+                                 end
+                          right:begin
+                                 if(origin[0] < 10)               
+                                     origin[0] <= origin[0]+1;   // x + 1
+                                end       
+                      endcase
+                    end 
+                   command <= Output;
+                   end   
+         Output:begin
+              dataout<=data[position];
+              out_index<=out_index+1;      
+              output_valid <= 1;                    
+              if(out_index == 16)begin
+                    busy <= 0;                           // end output data
+                    output_valid <= 0;     
+                    out_index <= 0;  
+                end
+              end          
+          endcase
+       end
+ end
+ endmodule
