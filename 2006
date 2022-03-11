@@ -1,0 +1,89 @@
+module triangle (clk, reset, nt, xi, yi, busy, po, xo, yo);
+input clk, reset, nt;
+input [2:0] xi, yi;
+output reg busy, po;
+output reg [2:0] xo, yo;
+
+reg [2:0]data_x[2:0];  //bit size ,number of array
+reg [2:0]data_y[2:0];  //bit size ,number of array
+reg [1:0]index;
+reg [1:0]command;
+parameter [1:0] nop       = 2'b00,
+                load      = 2'b01,
+                calculate = 2'b10;
+reg [2:0]i;
+reg [2:0]j; 
+
+wire  signed [10:0] line1, line2;
+assign line1 = (i-data_x[0])*(data_y[1]-data_y[0]) - (data_x[1]-data_x[0])*(j -data_y[0]); 
+assign line2 = (i-data_x[1])*(data_y[2]-data_y[1]) -(data_x[2]-data_x[1])*(j -data_y[1]);  
+/*
+left side   : line < 0
+on the line : line = 0
+right side  : line > 0
+*/
+
+always@(posedge clk , posedge reset)begin  
+     if(reset)begin
+         command <= nop;
+         index <= 0;
+         busy <= 0;
+         po <= 0; 
+     end
+     else if(nt == 1 || command == load)begin
+         command <= load;
+         data_x[index]<=xi;
+         data_y[index]<=yi;
+         index <= index + 1;
+      
+         if(index == 2)begin       // end loading
+             i <= data_x[0];
+             j <= data_y[0];
+             index <= 0;
+             busy  <= 1;     
+             command <=calculate;
+         end  
+     end
+     else begin
+         po <= 0;
+         if(data_x[1] > data_x[0])begin
+             if(line1 <= 0 && line2 <= 0)begin   
+                 xo <= i;
+                 yo <= j;
+                 po <= 1;
+             end
+                            
+         if(i > data_x[2] && j ==data_y[2])begin
+             busy <= 0;
+             po <=0;
+             command <= 0;
+         end 
+         else if( i ==  data_x[1])begin
+             i <= data_x[0] ;
+             j <= j+1;
+         end
+         else 
+             i <= i+1;
+         end
+         
+         else begin                  //data_x[1] < data_x[0]
+             if(line1 >= 0 && line2 >= 0 )begin
+                   xo <= i;
+                   yo <= j;
+                   po <= 1;
+             end
+                    
+             if(i == data_x[2] && j ==data_y[2])begin
+                  busy <= 0;
+                  command <= 0;
+             end 
+             else if( i == data_x[0])begin
+                 i <= data_x[1] ;
+                 j <= j+1;
+             end
+             else
+                 i <= i+1;
+         end
+    end        
+end //end always   
+endmodule
