@@ -1,0 +1,135 @@
+odule SME(clk,reset,chardata,isstring,ispattern,valid,match,match_index);
+input clk;
+input reset;
+input [7:0] chardata;
+input isstring;
+input ispattern;
+output reg       match;
+output reg [4:0] match_index;
+output reg       valid;
+
+reg [7:0] String [33:0];
+reg [5:0] String_len;
+reg [5:0] String_len_buf;
+
+reg [7:0] Pattern [7:0] ;
+reg [3:0] Pattern_len;
+reg [3:0] Pattern_len_buf;
+reg [31:0]i;
+reg [5:0] compare;
+reg [4:0] start;
+reg [2:0]command;
+reg  flag,flag2,flag3;
+parameter  unmatch = 1'b0 ,
+           Match   = 1'b1 ;
+
+always@(posedge clk ,posedge reset)begin
+if(reset)begin
+flag  <= 0;
+flag2 <= 0;
+flag3 <= 0;
+match       <= 0;
+match_index <= 0;
+valid       <= 0;
+String_len  <= 0;
+Pattern_len <= 0;
+String_len_buf  <= 0;
+Pattern_len_buf <= 0;
+compare <= 0;
+start <= 0;
+command <= 0;
+i <= 0;
+end
+else if(isstring == 1)begin     
+     valid <= 0;
+     String[String_len] <= chardata;
+     String_len <= String_len + 1;
+end 
+else if(ispattern == 1)begin
+     valid <= 0;
+     Pattern[Pattern_len] <= chardata;
+     Pattern_len <= Pattern_len + 1;
+end
+else begin              
+     case(command)
+           3'd0:begin
+                  if(String_len != 0)
+                       String_len_buf <= String_len ;                    
+                  if(Pattern_len != 0)
+                       Pattern_len_buf <= Pattern_len;
+                  String_len <= 0;
+                  Pattern_len <= 0;
+                  command <= 1;
+                end 
+          3'd1:begin       
+                  if(Pattern[0] == 94 )begin      // ^ signed
+                       flag2 <= 1;            
+                       Pattern[0] <= 32;          // change " ^ " into " "( blank )   
+                       for(i = String_len_buf; i>0; i=i- 1)
+                              String[i] <= String[i-1];         //right shift string 
+                       String_len_buf <= String_len_buf + 1;
+                       String[0] <= 32;                        // add blank at first
+                   end
+                   command <= 2;
+               end
+         3'd2:begin
+                if(Pattern[Pattern_len_buf-1] == 36 )begin     // $  signed
+                        flag3 <= 1;                        
+                        Pattern[Pattern_len_buf-1] <= 32;      // change " $ " into " "( blank )
+                        String[String_len_buf] <= 32 ;         // add blank at last
+                        String_len_buf <= String_len_buf + 1;     
+                end    
+                command <= 3;
+          end
+    3'd3:begin
+            if(Pattern[compare] ==  46 || Pattern[compare ] == String [compare+start])begin // " . " = 46
+                 compare <= compare + 1;                //if pattern is same to  string or pattern == " . " 
+            end 
+            else if(compare >= Pattern_len_buf )begin
+                 flag <= Match; 
+                 command <= 4;
+            end
+            else if(start + Pattern_len_buf >String_len_buf) begin  
+                  flag <= unmatch;
+                  command <= 4;                          
+            end
+            else begin
+                  start <= start + 1; 
+                  compare <= 0;
+            end
+         end
+    3'd4:begin
+            if( flag3 == 1)
+                  String_len_buf <= String_len_buf - 1;
+            command <= 5;
+         end
+    3'd5:begin
+             if( flag2 == 1)begin
+                 for(i = 0; i <String_len_buf; i = i+ 1)
+                        String[i] <= String[i+1];
+                 String_len_buf <= String_len_buf - 1;
+             end
+             command <= 6;
+         end
+    3'd6:begin
+            if ( flag == Match)begin
+                     match<= 1;
+                     valid <= 1;
+                     match_index <= start; 
+            end
+            else begin     
+                      match<= 0;
+                      valid <= 1;
+            end
+            flag    <= 0;
+            flag2   <= 0; 
+            flag3   <= 0;
+            start   <= 0; 
+            compare <= 0;
+            command <= 0;
+          end
+    endcase      
+end
+
+end
+endmodule
