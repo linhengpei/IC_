@@ -1,0 +1,227 @@
+
+`timescale 1ns/10ps
+
+module  CONV(clk,		reset,	busy,	ready,	 iaddr,	idata,	cwr, caddr_wr, cdata_wr, crd, caddr_rd ,cdata_rd ,csel);
+	input		clk;
+	input		reset;
+	output	reg	busy;	
+	input		ready;	
+			
+	output	reg [11:0] iaddr;
+	input	[19:0]	idata;
+	
+	output	reg             cwr;
+	output	reg [11:0] caddr_wr;
+	output	reg [19:0] cdata_wr;
+	
+	output	reg 	        crd;
+	output	reg [11:0] caddr_rd;
+	input	 	[19:0] cdata_rd;
+	
+	output	reg [2:0]	csel;
+	
+reg [19:0] max;
+reg [5:0] x,y;
+wire [11:0]position;
+assign position = (y<<6) + x;       
+   
+reg signed [39:0]sum;
+reg signed [19:0]kernal;
+
+wire [39:0]multi;
+assign multi = $signed(kernal) * $signed(idata); 
+
+reg [4:0]state; 
+parameter k1 = 20'h0a89e,
+          k2 = 20'h092d5,
+          k3 = 20'h06d43,
+          k4 = 20'h01004,
+          k5 = 20'hf8f71,
+          k6 = 20'hf6e54,
+          k7 = 20'hfa6d7,
+          k8 = 20'hfc834,
+          k9 = 20'hfac19,
+          bias = 20'h01310;     // save info
+
+always@(posedge clk ,posedge reset)begin
+  if(reset)begin
+    busy <= 0;
+    iaddr <= 0;
+	cwr <= 0;
+	caddr_wr <= 0;
+	cdata_wr <= 0;
+	crd <= 0;
+	caddr_rd <= 0;
+    csel <= 0;
+    state <= 0;
+    x <= 0;
+    y <= 0;
+ end
+ else if( ready == 1)begin
+     busy <= 1;
+ end
+ else begin
+      case(state)
+     /*
+         save data order 
+         1 | 2 | 3
+         4 | 5 | 6
+         7 | 8 | 9  
+         
+         position is on the center ( 5 )    
+
+         state  0 to state 20 is level 0
+         state 21 to state 30 is level 1 
+     */
+        5'd0:begin
+             cwr <= 0  ;    
+             csel <= 0 ;
+             sum <= 0  ;
+             iaddr <= position - 65;
+             kernal <= k1;
+            end
+        5'd1:sum <= ( x != 0 && y != 0) ? sum + multi : sum ;      
+
+
+        5'd2:begin
+             iaddr <= position - 64;
+             kernal <= k2;
+             end   
+        5'd3:sum <= ( y != 0) ? sum + multi : sum ;  
+
+
+        5'd4:begin
+             iaddr <= position - 63;
+             kernal <= k3;
+             end   
+        5'd5:sum <= ( x != 63 && y != 0) ? sum + multi : sum ;           
+
+
+        5'd6:begin
+             iaddr <= position - 1;
+             kernal <= k4;
+             end   
+        5'd7:sum <= ( x != 0 ) ? sum + multi : sum ;              
+        
+
+        5'd8:begin
+             iaddr <= position ;
+             kernal <= k5;
+             end
+        5'd9: sum <= sum + multi;
+
+
+        5'd10:begin
+              iaddr <= position +1 ;
+              kernal <= k6;
+              end   
+        5'd11:sum <= ( x != 63 ) ? sum + multi : sum ;
+
+
+        5'd12:begin
+              iaddr <= position +63;
+              kernal <= k7;
+              end 
+        5'd13:sum <= ( x != 0 && y != 63) ? sum + multi : sum ;
+              
+
+        5'd14:begin
+              iaddr <= position +64;
+              kernal <= k8;
+              end       
+        5'd15:sum <= ( y != 63 ) ? sum + multi : sum ;
+               
+
+
+        5'd16:begin
+              iaddr <= position +65 ;
+              kernal <= k9;
+              end 
+        5'd17:sum <= ( x != 63 && y != 63 ) ? sum + multi : sum ;
+              
+
+
+        5'd18:begin
+              if(sum[15] == 1)
+                 cdata_wr  <= sum[35:16] +1+bias; 
+              else
+                  cdata_wr <= sum[35:16] +bias;   
+            
+              end  
+        5'd19:begin
+              csel <= 1;    //level 0
+              cwr <= 1;     //star write data 
+
+              caddr_wr <= position;
+              if(cdata_wr [19]== 1)
+                 cdata_wr <= 0 ;   
+                  
+              end 
+        5'd20:begin
+              csel <= 0;   
+              cwr <= 0;     //end write data 
+            
+              if(x == 63 && y == 63)begin
+                   x<= 0;
+                   y <= 0;
+              end  
+              else if(x==63)begin
+                   x <= 0;
+                   y <= y+1;
+              end  
+              else begin
+                  x <= x+1;
+              end   
+              end     
+        
+        5'd21:begin       //leve1 1 begin
+              csel <= 1;    //level 0
+              crd <= 1;     //read data 
+              caddr_rd <= position;
+              end
+        5'd22:max <= cdata_rd;
+        5'd23:caddr_rd <= position+1;
+        5'd24:max <= (max < cdata_rd) ? cdata_rd : max ;
+        5'd25:caddr_rd <= position+64;
+        5'd26:max <= (max < cdata_rd) ? cdata_rd : max ;
+        5'd27:caddr_rd <= position+65;
+        5'd28:max <= (max < cdata_rd) ? cdata_rd : max ;
+        5'd29:begin   // output to level 1
+              csel <= 3;    //level 1
+              cwr <= 1;     //write data 
+              crd <= 0;     
+              caddr_wr <= { y,4'd0}  + x[5:1];
+              cdata_wr <= max;              
+              end
+        5'd30:begin 
+              cwr <= 0;
+              if(x == 62 & y == 62)begin
+                   busy <= 0;
+              end  
+              else if(x==62)begin
+                   x <= 0;
+                   y <= y+2;
+              end  
+              else
+                   x <= x+2;    
+              end  
+        endcase
+          
+        
+        if(state == 20 )begin
+             if(x == 63 && y == 63)
+                 state <=21;          //start level 1
+             else
+                 state <=0;           // back to level 0
+        end      
+        else if(state == 30 )begin
+             if (x == 62 && y == 62 )
+                 state <=0;           // simulation finish
+             else           
+                 state <=21;          // back to level 1
+        end      
+        else
+             state <= state +1 ;              
+    end    
+end  // end always
+endmodule
