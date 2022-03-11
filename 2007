@@ -1,0 +1,95 @@
+module lcd_ctrl(clk, reset, datain, cmd, cmd_valid, dataout, output_valid, busy);
+input           clk;
+input           reset;
+input   [7:0]   datain;            // graph info
+input   [2:0]   cmd;               // command mode
+input           cmd_valid;         
+output reg [7:0]   dataout;  
+output reg         output_valid;
+output reg         busy;
+
+reg [5:0] store_index;
+reg [3:0] out_index;
+
+reg [7:0] data[35:0];            //save data
+reg [1:0]origin[1:0];            //save origin coordination
+
+reg [2:0] command;               //save command
+parameter Output     = 3'd0, 
+          Load       = 3'd1,
+          Shiftright = 3'd2,
+          Shiftleft  = 3'd3,
+          Shiftup    = 3'd4,
+          Shiftdown  = 3'd5;
+          
+wire [6:0] position;
+assign position = (out_index%3+origin[0])+(origin[1]+out_index/3)*6 ;
+
+always@(posedge clk or posedge reset)begin
+    if(reset)begin 
+        store_index <= 0;
+        out_index <=0;      // initialize index data
+ 
+        origin[0]<=0;
+        origin[1]<=0;
+        output_valid <= 0;
+        busy <= 0;          //all out put 0
+    end 
+    else if(cmd_valid == 1)begin
+          command <= cmd;
+          busy <= 1 ;
+    end 
+    else begin
+        case(command)
+         Load:begin
+              data[store_index] <= datain;
+              store_index <= store_index+1;  
+              if(store_index == 35 )  begin         //end load data
+                 command <= Output;      
+                 origin[0] <= 2;   
+                 origin[1] <= 2;
+                 store_index <= 0;
+                end
+              end
+        Output:begin
+              dataout<=data[position];
+              out_index<=out_index+1;      
+              output_valid <= 1;                    
+              if(out_index == 9)begin
+                    busy <= 0;                           // end output data
+                    output_valid <= 0;     
+                    out_index <= 0;  
+                end
+              end
+        Shiftright:begin
+                   if(origin[0]<3)               // shiftright
+                      origin[0] = origin[0]+1;   // x + 1 
+                   else   
+                      origin[0] = origin[0]; 
+                   command <= Output;
+                   end   
+        Shiftleft:begin
+                  if(origin[0]>0)               // shiftleft
+                     origin[0] = origin[0]-1;    // x - 1 
+                  else   
+                     origin[0] = origin[0];
+                  command <= Output;
+                  end   
+          Shiftup:begin
+                  if(origin[1]>0)               // shiftup
+                     origin[1] = origin[1]-1;    // y - 1 
+                  else   
+                     origin[1] = origin[1];
+                  command <= Output;     
+                  end     
+        Shiftdown:begin
+                  if(origin[1]<3)               // shiftdown
+                     origin[1] = origin[1]+1;    // y + 1 
+                  else   
+                     origin[1] = origin[1];
+                  command <= Output;
+                  end     
+          endcase
+       end
+ end
+ endmodule
