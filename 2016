@@ -22,81 +22,81 @@ always@(posedge clk)begin
      lbp_valid <= 0;
      lbp_data <= 0;
      finish <= 0;
-     state <=15; 
+     state <=0; 
   end
   else begin
-       gray_req <= 1;
+     if(gray_ready)
+           gray_req <= 1;
+     if(gray_req)begin
        case (state)
         4'd0:begin
              gray_addr <= gray_addr+128;
              data[state] <= gray_data;
-             state <= state+1;
+            
              end 
         4'd1:begin
              gray_addr <= gray_addr+128;
              data[state] <= gray_data;
-             state <= state+1;
+             
              end 
         4'd2:begin
              gray_addr <= gray_addr-255;
              data[state] <= gray_data;
-             state <= state+1;
+       
              end 
         4'd3:begin
              gray_addr <= gray_addr+128;
              data[state] <= gray_data;
-             state <= state+1;
+            
              end
         4'd4:begin
              gray_addr <= gray_addr+128;
              data[state] <= gray_data;
-             state <= state+1;
+             
              end
         4'd5:begin
              gray_addr <= gray_addr-255;
              data[state] <= gray_data;
-             state <= state+1;
+             
              end     
-        4'd6:begin   
+        4'd6:begin 
+             lbp_data[0] <=(data[0] >= data[4])? 1 : 0 ;
+             lbp_data[3] <=(data[1] >= data[4])? 1 : 0 ;
+             lbp_data[5] <=(data[2] >= data[4])? 1 : 0 ;
+  
              gray_addr <= gray_addr+128;
              data[state] <= gray_data;
-             state <= state+1;
+            
              end
         4'd7:begin
+             lbp_data[1] <=(data[3] >= data[4])? 1 : 0 ;
+             lbp_data[6] <=(data[5] >= data[4])? 1 : 0 ;
+
              gray_addr <= gray_addr+128;
              data[state] <= gray_data;
-             state <= state + 1;
+            
              end    
         4'd8:begin
-             data[state] <= gray_data;
-             state <= state + 1;
-             end            
-        4'd9:begin  //output data
              lbp_valid <= 1; 
-             lbp_data[0] <=(data[0] >= data[4])? 1 : 0 ;
-             lbp_data[1] <=(data[3] >= data[4])? 1 : 0 ;
              lbp_data[2] <=(data[6] >= data[4])? 1 : 0 ;
-             lbp_data[3] <=(data[1] >= data[4])? 1 : 0 ;
              lbp_data[4] <=(data[7] >= data[4])? 1 : 0 ;
-             lbp_data[5] <=(data[2] >= data[4])? 1 : 0 ;
-             lbp_data[6] <=(data[5] >= data[4])? 1 : 0 ;
-             lbp_data[7] <=(data[8] >= data[4])? 1 : 0 ; 
-             state <= state + 1;
-             end
-        4'd10:begin  
-              lbp_valid <= 0;   
-              if(lbp_addr[6:0] == 126 )begin  //next line
-                  if( lbp_addr == 16254)begin
-                     finish <= 1;
-                  end
-                  else begin
-                     finish <= 0; 
-                     lbp_addr <= lbp_addr +3;
-                     gray_addr <= gray_addr -255;
-                  end
+             lbp_data[7] <=(gray_data >= data[4])? 1 : 0 ; 
+
+             data[state] <= gray_data;
+           
+             end            
+          endcase
+          
+          if(state == 9)begin
+              lbp_valid <= 0;  
+              if( lbp_addr == 16254)
+                       finish <= 1;
+              if(lbp_addr[6:0] == 7'b1111110 )begin  //next line
+                  lbp_addr <= lbp_addr +3;
+                  gray_addr <= gray_addr -255;
                   state <= 0;
-             end
-             else begin
+              end
+              else begin
                  lbp_addr <= lbp_addr+1;
                  gray_addr <= gray_addr -255;
                  state <= 6;
@@ -106,10 +106,11 @@ always@(posedge clk)begin
                  data[3] <= data[6];
                  data[4] <= data[7];
                  data[5] <= data[8];
-             end
-           end
-       default: state <= 0;
-      endcase  
+              end
+          end
+          else
+                state <= state + 1;
+      end  
     end  
 end
 endmodule
