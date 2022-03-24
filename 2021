@@ -1,0 +1,135 @@
+module geofence ( clk,reset,X,Y,valid,is_inside);
+input clk;
+input reset;
+input [9:0] X;
+input [9:0] Y;
+output reg valid;
+output reg is_inside;
+
+reg [4:0]state;
+reg [10:0]object_x;
+reg [10:0]object_y;
+reg [10:0]geofence_x[6:1];
+reg [10:0]geofence_y[6:1];
+
+wire signed[20:0]result;
+reg  signed[20:0]result1;
+reg  signed [10:0]temp1,temp2;
+assign result = temp1 * temp2;
+
+reg [3:0]order[7:1];
+reg [3:0]order_index;
+reg [3:0]min,counter;
+always@(posedge clk ,posedge reset)begin
+if(reset)begin
+valid <= 0;
+is_inside <= 1;
+state <= 0;
+counter <= 1;
+order[1] <= 1;
+order[7] <= 1;
+order_index <= 2;
+min <= 2;
+end 
+else begin
+	case(state)
+		0:begin
+			object_x <= X;
+			object_y <= Y;
+			end
+		1:begin
+			geofence_x[state] <= X;
+			geofence_y[state] <= Y;
+			end
+		2:begin
+			geofence_x[state] <= X;
+			geofence_y[state] <= Y;
+			state <= state +1;
+			end
+		3:begin
+			geofence_x[state] <= X;
+			geofence_y[state] <= Y;
+			end
+		4:begin
+			geofence_x[state] <= X;
+			geofence_y[state] <= Y;
+			end 
+		5:begin
+			geofence_x[state] <= X;
+			geofence_y[state] <= Y;
+			end
+		6:begin
+			geofence_x[state] <= X;
+			geofence_y[state] <= Y;
+			end                   //load data
+
+		7:begin
+			temp1 <= geofence_x[min]-geofence_x[order[order_index-1]];
+			temp2 <= geofence_y[counter]-geofence_y[order[order_index-1]];
+			end    
+		8:begin
+			result1 <= result;  
+			end
+		9:begin
+			temp1 <= geofence_x[counter]-geofence_x[order[order_index-1]];
+			temp2 <= geofence_y[min]-geofence_y[order[order_index-1]];
+			end
+		10:begin
+			if(result1 > result && order[order_index-1]!= counter )        
+				min <= counter;
+
+			if(counter == 6)
+				counter<= 1;
+			else
+				counter <= counter +1;
+			end                                    // 7~10 choose the next AP
+
+		11:begin
+			order[order_index] <= min;
+			order_index <= order_index + 1;
+
+			if(order_index != 6)                     // if order_index == 6 all AP are choosen
+				min <= order[order_index-1];         // choose next AP         
+			end
+		12:begin
+			temp1 <= geofence_x[order[counter]]-object_x;
+			temp2 <= geofence_y[order[counter+1]] - geofence_y[order[counter]];
+			end    
+		13:begin
+			result1 <= result;  
+			end
+		14:begin
+			temp1 <= geofence_x[order[counter+1]] - geofence_x[order[counter]];
+			temp2 <= geofence_y[order[counter]]-object_y;
+			end
+		15:begin
+			if(result1 > result)        
+				is_inside <= 0;
+
+			if(counter != 6)  
+				counter <= counter +1;
+			end                            // 12 ~ 15 choose the next AP 
+
+		16:begin
+			valid <= 1;  
+			end
+		17:begin
+			valid <= 0;
+			is_inside <= 1;
+			counter <= 1;
+			order_index <= 2;
+			min <= 2; 
+		end
+	endcase
+
+	if((state == 10 && counter !=6)||(state == 11  && order_index != 6))
+		state <= 7;
+	else if (state == 15 && counter !=6) 
+		state <= 12;
+	else if(state == 17)
+		state <= 0;
+	else
+		state <= state + 1;
+end
+end
+endmodule
